@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Story Words · Movers</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:clamp(14px,4vw,44px);background:linear-gradient(140deg,#e8f4ff,#f7ebff 60%,#fff5dd);min-height:100vh;color:#252441;font:1rem/1.5 system-ui,sans-serif}
+main{max-width:680px;margin:auto}
+header{margin-bottom:20px}header p{margin:5px 0}
+h1{font-size:clamp(2.25rem,7vw,3.75rem);line-height:1.05;margin:8px 0 12px;letter-spacing:-.04em}
+small{font-weight:750;color:#4d3b82}
+.card{border:1px solid #dcd3ed;background:#fff;border-radius:26px;padding:clamp(16px,5vw,32px);box-shadow:0 12px 32px #45306f14}
+.meta{display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px 12px;font-weight:700;color:#4d3b82}
+progress{display:block;width:100%;height:10px;margin:10px 0 22px;accent-color:#6642ac}
+h2{margin:0;font-size:clamp(1.25rem,4vw,1.65rem)}
+.story{margin:16px 0;padding:16px;border-radius:18px;background:#fff3d6;font-size:clamp(1.1rem,3vw,1.35rem);font-weight:650}
+.gap{color:#55368d;white-space:nowrap}
+.options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+button,input{font:inherit;border-radius:13px;min-height:48px}
+button{cursor:pointer;touch-action:manipulation;border:1px solid #d7c8f1;padding:9px 12px;font-weight:750;color:#322452;background:#f0e8ff}
+button:disabled{cursor:default}
+button.wrong{background:#ffe1e4;color:#8f2435;border-color:#ce8091}
+button.right{background:#d9f6e7;color:#15543e;border-color:#73ba9b}
+.primary{background:#53358e;color:white;border-color:#53358e;width:100%}
+input{display:block;width:100%;padding:9px 12px;border:2px solid #bdaae0;margin:5px 0 10px;color:inherit}
+:focus-visible{outline:3px solid #3656a6;outline-offset:3px}
+#feedback{margin:12px 0 0;color:#882635;font-weight:650}
+#feedback:empty{margin:0}
+#feedback.correct{color:#156048}
+#next{margin-top:14px}
+.words{font-size:.94rem;color:#4d3b82;margin:10px 0 0}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+<header><small>English · Movers</small><h1>Story Words</h1><p>Put events in order and show when something unexpected happens.</p></header>
+<section class="card" aria-labelledby="title">
+<div class="meta"><span id="round"></span><span id="count"></span></div>
+<progress id="progress" aria-label="Round progress"></progress>
+<h2 id="title" tabindex="-1"></h2>
+<p id="story" class="story"></p>
+<div id="options" class="options"></div>
+<form id="writing" novalidate>
+<label for="answer">Your answer</label>
+<input id="answer" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" enterkeyhint="done" aria-describedby="story feedback">
+<button id="check" class="primary">Check answer</button>
+</form>
+<p id="feedback" role="status"></p>
+<button id="next" class="primary" type="button" hidden></button>
+</section>
+</main>
+<script>
+'use strict';
+const words = ['first', 'after that', 'suddenly', 'finally'];
+const hints = [
+  'Which word tells us what happens at the beginning?',
+  'Which phrase means “then”?',
+  'Which word tells us something quick and unexpected happened?',
+  'Which word tells us what happens at the end?'
+];
+const parts = [
+  'Start with f. It has five letters.',
+  'Write two words. The first word starts with a and the second starts with t.',
+  'Start with sud and end with ly.',
+  'Start with fin and end with ly.'
+];
+const rounds = [
+  [
+    [0, '', 'wash your hands. Then you can make your sandwich.'],
+    [2, 'The park was very quiet.', 'a dog ran out from behind a tree!'],
+    [1, 'Kim did her homework.', 'she packed her school bag. She still had to feed the cat.'],
+    [3, 'We looked in every room for my shoes.', 'we found them. Now we could leave!'],
+    [1, 'Ben put on his socks.', 'he put on his shoes. Then he put on his coat.'],
+    [0, '', 'open your book. Then look at the picture.'],
+    [3, 'I tried to ride my bike all morning.', 'I could ride it on my own!'],
+    [2, 'We were watching TV.', 'all the lights went out!']
+  ],
+  [
+    [3, 'We walked for hours.', 'we got to the top of the hill. That was the end of our walk.'],
+    [1, 'Mia drew a picture.', 'she coloured it. Then she put it on the wall.'],
+    [2, 'The children were eating lunch.', 'a ball flew in through the open window!'],
+    [0, '', 'get a bowl. Then put some flour in it.'],
+    [2, 'I was reading in bed.', 'I heard a loud bang!'],
+    [3, 'Dad tried all his keys.', 'he opened the door and we could go inside.'],
+    [0, '', 'write your name. Then answer the questions.'],
+    [1, 'We ate lunch.', 'we played football. Then we went home.']
+  ]
+];
+const $ = id => document.getElementById(id);
+const answer = $('answer');
+const next = $('next');
+const feedback = $('feedback');
+const title = $('title');
+let round = 0;
+let index = 0;
+let attempts = 0;
+let solved = false;
+
+function sentence(before, word, after) {
+  const gap = document.createElement('span');
+  gap.className = 'gap';
+  gap.textContent = word;
+  $('story').replaceChildren(before ? before + ' ' : '', gap, ', ' + after);
+}
+
+function render() {
+  const questions = rounds[round];
+  const item = questions[index];
+  attempts = 0;
+  solved = false;
+  $('round').textContent = 'Round ' + (round + 1) + ' of 2';
+  $('count').textContent = item ? 'Question ' + (index + 1) + ' of ' + questions.length : 'Complete';
+  $('progress').max = questions.length;
+  $('progress').value = index;
+  $('story').hidden = !item;
+  $('writing').hidden = !item || round === 0;
+  $('options').replaceChildren();
+  feedback.textContent = '';
+  feedback.className = '';
+  answer.value = '';
+  answer.readOnly = false;
+  $('check').disabled = false;
+  next.hidden = Boolean(item);
+
+  if (!item) {
+    title.textContent = round === 0 ? 'You finished Round 1!' : 'You finished both rounds!';
+    feedback.textContent = round === 0
+      ? 'Now try typing the story words yourself.'
+      : 'You practised first, after that, suddenly and finally.';
+    feedback.className = 'correct';
+    next.textContent = round === 0 ? 'Start the writing round' : 'Play again';
+    return;
+  }
+
+  title.textContent = round === 0 ? 'Choose the best word or phrase.' : 'Type the missing word or phrase.';
+  sentence(item[1], '_____', item[2]);
+  if (round === 0) {
+    words.forEach((_, offset) => {
+      const choice = (index + offset) % words.length;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = words[choice];
+      button.addEventListener('click', () => {
+        if (choice === item[0]) {
+          button.classList.add('right');
+          finishItem(item);
+        } else {
+          button.classList.add('wrong');
+          button.disabled = true;
+          feedback.textContent = 'Try again. ' + hints[item[0]];
+          $('options').querySelector('button:not(:disabled)')?.focus();
+        }
+      });
+      $('options').append(button);
+    });
+  }
+}
+
+function finishItem([key, before, after]) {
+  solved = true;
+  const word = words[key];
+  sentence(before, word[0].toUpperCase() + word.slice(1), after);
+  feedback.textContent = 'Well done! ' + word + ' fits the story.';
+  feedback.className = 'correct';
+  $('progress').value = index + 1;
+  answer.readOnly = true;
+  $('check').disabled = true;
+  $('options').querySelectorAll('button').forEach(button => { button.disabled = true; });
+  next.textContent = index + 1 === rounds[round].length ? 'Finish round' : 'Next question';
+  next.hidden = false;
+  next.focus();
+}
+
+$('writing').addEventListener('submit', event => {
+  event.preventDefault();
+  if (round !== 1 || solved || index >= rounds[round].length) return;
+  const item = rounds[round][index];
+  const key = item[0];
+  const typed = answer.value.trim().toLowerCase().replace(/,+$/, '').trim().replace(/\s+/g, ' ');
+  if (typed === words[key]) {
+    finishItem(item);
+    return;
+  }
+  if (!typed) {
+    feedback.textContent = 'Type a word or phrase first. ' + hints[key];
+  } else {
+    attempts++;
+    feedback.textContent = attempts === 1 ? hints[key] :
+      attempts === 2 ? hints[key] + ' ' + parts[key] : 'Type “' + words[key] + '”, then check your answer.';
+  }
+  answer.focus();
+  answer.select();
+});
+
+next.addEventListener('click', () => {
+  if (index < rounds[round].length) {
+    if (!solved) return;
+    index++;
+  } else {
+    round = (round + 1) % rounds.length;
+    index = 0;
+  }
+  render();
+  title.focus();
+});
+
+render();
+</script>
+</body>
+</html>
